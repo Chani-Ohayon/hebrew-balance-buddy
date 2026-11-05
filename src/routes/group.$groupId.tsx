@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, Trash2, Users, Receipt, Calculator, Copy, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowRight, Trash2, Pencil, Check, X, Users, Receipt, Calculator, Copy, MessageCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { Member } from "@/lib/settlements";
 import {
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/group/$groupId")({
   component: GroupPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-center" dir="rtl">
-      <p className="text-destructive">שגיאה: {error.message}</p>
+      <p className="text-destructive">שגיאה: {(error as Error).message}</p>
       <Link to="/" className="mt-4 inline-block text-primary underline">חזרה</Link>
     </div>
   ),
@@ -156,6 +156,24 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [edit, setEdit] = useState({ name: "", phone: "", details: "" });
+
+  const update = useMutation({
+    mutationFn: async (id: string) => {
+      const n = edit.name.trim();
+      if (!n) throw new Error("שם חסר");
+      const { error } = await supabase.from("members").update({
+        name: n,
+        phone: edit.phone.trim() || null,
+        payment_details: edit.details.trim() || null,
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { setEditingId(null); toast.success("הפרטים עודכנו ✏️"); onChange(); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("members").delete().eq("id", id);
@@ -204,7 +222,23 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
         {members.length === 0 ? (
           <Card className="border-dashed"><CardContent className="py-10 text-center text-muted-foreground">עדיין אין חברים</CardContent></Card>
         ) : (
-          members.map((m) => (
+          members.map((m) => editingId === m.id ? (
+            <Card key={m.id} className="border-2 border-primary">
+              <CardContent className="grid gap-2 p-4 md:grid-cols-3">
+                <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="שם" maxLength={60} />
+                <Input value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="טלפון" maxLength={20} />
+                <Input value={edit.details} onChange={(e) => setEdit({ ...edit, details: e.target.value })} placeholder="פרטי תשלום" maxLength={200} />
+                <div className="flex gap-2 md:col-span-3">
+                  <Button size="sm" className="rounded-lg font-bold" disabled={update.isPending || !edit.name.trim()} onClick={() => update.mutate(m.id)}>
+                    <Check className="ms-1 h-4 w-4" /> שמור
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                    <X className="ms-1 h-4 w-4" /> ביטול
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
             <Card key={m.id} className="border-2 transition-shadow hover:shadow-soft">
               <CardContent className="flex items-center justify-between gap-3 p-4">
                 <div className="min-w-0">
@@ -213,6 +247,18 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
                     {[m.phone, m.payment_details].filter(Boolean).join(" · ") || "אין פרטים נוספים"}
                   </p>
                 </div>
+                <div className="flex shrink-0 gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="עריכה"
+                  onClick={() => {
+                    setEditingId(m.id);
+                    setEdit({ name: m.name, phone: m.phone ?? "", details: m.payment_details ?? "" });
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -223,6 +269,7 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
+                </div>
               </CardContent>
             </Card>
           ))

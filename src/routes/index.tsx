@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calculator, Plus, Users, ArrowLeft } from "lucide-react";
+import { Calculator, Plus, Users, ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
@@ -46,6 +46,18 @@ function HomePage() {
       setName("");
       toast.success("הקבוצה נוצרה 🎉");
       navigate({ to: "/group/$groupId", params: { groupId: g.id } });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("groups").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["groups"] });
+      toast.success("הקבוצה נמחקה");
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -133,7 +145,22 @@ function HomePage() {
                         {new Date(g.created_at).toLocaleDateString("he-IL")}
                       </p>
                     </div>
-                    <ArrowLeft className="h-5 w-5 text-muted-foreground transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="מחק קבוצה"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          if (confirm(`למחוק את הקבוצה "${g.name}"? כל החברים וההוצאות יימחקו.`)) deleteGroup.mutate(g.id);
+                        }}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <ArrowLeft className="h-5 w-5 text-muted-foreground transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
