@@ -293,6 +293,16 @@ function ExpensesTab({
   const [amount, setAmount] = useState("");
   const [payerId, setPayerId] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const startEdit = (e: ExpenseWithBeneficiaries) => {
+    setEditId(e.id); setTitle(e.title); setAmount(String(e.amount));
+    setPayerId(e.payer_id); setSelected(new Set(e.beneficiary_ids));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancelEdit = () => {
+    setEditId(null); setTitle(""); setAmount(""); setSelected(new Set());
+  };
 
   const toggleAll = () => {
     if (selected.size === members.length) setSelected(new Set());
@@ -313,6 +323,17 @@ function ExpensesTab({
       if (!payerId) throw new Error("בחרו מי שילם");
       if (selected.size === 0) throw new Error("בחרו לפחות משתתף אחד");
 
+      if (editId) {
+        const { error: uErr } = await supabase.from("expenses")
+          .update({ payer_id: payerId, title: t, amount: amt }).eq("id", editId);
+        if (uErr) throw uErr;
+        const { error: dErr } = await supabase.from("expense_beneficiaries").delete().eq("expense_id", editId);
+        if (dErr) throw dErr;
+        const { error: iErr } = await supabase.from("expense_beneficiaries")
+          .insert(Array.from(selected).map((mid) => ({ expense_id: editId, member_id: mid })));
+        if (iErr) throw iErr;
+        return "edit";
+      }
       const { data: exp, error } = await supabase
         .from("expenses")
         .insert({ group_id: groupId, payer_id: payerId, title: t, amount: amt })
@@ -323,9 +344,9 @@ function ExpensesTab({
       const { error: bErr } = await supabase.from("expense_beneficiaries").insert(rows);
       if (bErr) throw bErr;
     },
-    onSuccess: () => {
-      setTitle(""); setAmount(""); setSelected(new Set());
-      toast.success("הוצאה נוספה 💸");
+    onSuccess: (r) => {
+      setTitle(""); setAmount(""); setSelected(new Set()); setEditId(null);
+      toast.success(r === "edit" ? "ההוצאה עודכנה ✏️" : "הוצאה נוספה 💸");
       onChange();
     },
     onError: (e) => toast.error((e as Error).message),
@@ -355,7 +376,7 @@ function ExpensesTab({
   return (
     <>
       <Card className="border-2 shadow-soft">
-        <CardHeader><CardTitle>הוצאה חדשה</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{editId ? "עריכת הוצאה ✏️" : "הוצאה חדשה"}</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={(e) => { e.preventDefault(); add.mutate(); }} className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-2">
@@ -403,8 +424,11 @@ function ExpensesTab({
               </div>
             </div>
             <Button type="submit" disabled={add.isPending} size="lg" className="rounded-xl font-bold">
-              {add.isPending ? "מוסיף..." : "הוסף הוצאה"}
+              {add.isPending ? "שומר..." : editId ? "שמור שינויים" : "הוסף הוצאה"}
             </Button>
+            {editId && (
+              <Button type="button" variant="outline" onClick={cancelEdit} className="rounded-xl">ביטול</Button>
+            )}
           </form>
         </CardContent>
       </Card>
@@ -430,10 +454,13 @@ function ExpensesTab({
                     עבור: {e.beneficiary_ids.map((id) => memberById.get(id)?.name).filter(Boolean).join(", ") || "—"}
                   </p>
                 </div>
+                <Button variant="ghost" size="icon" onClick={() => startEdit(e)} aria-label="עריכה">
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => { if (confirm("למחוק את ההוצאה?")) remove.mutate(e.id); }}
+                  onClick={() => { if (confirm("למחוק את ההוצאה?")) { if (editId === e.id) cancelEdit(); remove.mutate(e.id); } }}
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
