@@ -23,7 +23,7 @@ export const Route = createFileRoute("/group/$groupId")({
   component: GroupPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-center" dir="rtl">
-      <p className="text-destructive">שגיאה: {error.message}</p>
+      <p className="text-destructive">שגיאה: {(error as Error).message}</p>
       <Link to="/" className="mt-4 inline-block text-primary underline">חזרה</Link>
     </div>
   ),
