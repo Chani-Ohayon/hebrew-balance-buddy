@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Persist payment status per settlement and financial calculation snapshot; changes to expenses or group membership must not reuse obsolete paid flags.
+- Gmail reminders use client-side compose links with BCC recipients, never automatic email sends or account connectors.
