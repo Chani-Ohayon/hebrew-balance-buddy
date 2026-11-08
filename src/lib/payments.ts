@@ -1,14 +1,17 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { ExpenseWithBeneficiaries, Member, Settlement } from "./settlements";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 export type SettlementPayment = Tables<"settlement_payments">;
 
 export function calculationKey(members: Member[], expenses: ExpenseWithBeneficiaries[]): string {
-  return JSON.stringify({
+  const canonical = JSON.stringify({
     members: members.map((m) => m.id).sort(),
     expenses: expenses.map((e) => [e.id, Number(e.amount), e.payer_id, [...e.beneficiary_ids].sort()])
       .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
   });
+  return bytesToHex(sha256(new TextEncoder().encode(canonical)));
 }
 
 export function isSettlementPaid(s: Settlement, payments: SettlementPayment[], key: string): boolean {

@@ -616,6 +616,9 @@ function BalanceTab({
             </div>
           )}
           {missingEmails.length > 0 && <p className="break-words text-sm text-destructive">חסרה כתובת מייל: {missingEmails.join(", ")}</p>}
+          {payments.some((p) => p.is_paid && p.calculation_key !== key) && !payments.some((p) => p.calculation_key === key) && (
+            <p className="text-sm text-muted-foreground">החישוב השתנה מאז סימון התשלומים הקודם. יש לבדוק מחדש אילו העברות שולמו.</p>
+          )}
           {settlements.length === 0 ? (
             <p className="py-6 text-center text-muted-foreground">🎉 הכל מאוזן, אין צורך בהעברות</p>
           ) : (
