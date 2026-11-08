@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, Trash2, Pencil, Check, X, Users, Receipt, Calculator, Copy, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowRight, Trash2, Pencil, Check, X, Users, Receipt, Calculator, Copy, MessageCircle, Sparkles, Mail } from "lucide-react";
+import { calculationKey, gmailReminderUrl, isSettlementPaid, unpaidSettlements, validEmail, type SettlementPayment } from "@/lib/payments";
 import { toast } from "sonner";
 import type { Member } from "@/lib/settlements";
 import {
@@ -20,6 +21,14 @@ import {
 } from "@/lib/settlements";
 
 export const Route = createFileRoute("/group/$groupId")({
+  head: () => ({ meta: [
+    { title: "התחשבנות ותשלומים בקבוצה — חישוב מהיר" },
+    { name: "description", content: "ניהול חברים, הוצאות, תשלומים ותזכורות במייל לקבוצה." },
+    { property: "og:title", content: "התחשבנות ותשלומים בקבוצה — חישוב מהיר" },
+    { property: "og:description", content: "מעקב הוצאות משותפות ותשלומים לחברי הקבוצה." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: GroupPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-center" dir="rtl">
@@ -36,17 +45,19 @@ export const Route = createFileRoute("/group/$groupId")({
 });
 
 async function fetchGroupBundle(groupId: string) {
-  const [{ data: group, error: gErr }, { data: members, error: mErr }, { data: expenses, error: eErr }, { data: benes, error: bErr }] =
+  const [{ data: group, error: gErr }, { data: members, error: mErr }, { data: expenses, error: eErr }, { data: benes, error: bErr }, { data: payments, error: pErr }] =
     await Promise.all([
       supabase.from("groups").select("*").eq("id", groupId).maybeSingle(),
       supabase.from("members").select("*").eq("group_id", groupId).order("created_at"),
       supabase.from("expenses").select("*").eq("group_id", groupId).order("created_at", { ascending: false }),
       supabase.from("expense_beneficiaries").select("expense_id, member_id"),
+      supabase.from("settlement_payments").select("*").eq("group_id", groupId),
     ]);
   if (gErr) throw gErr;
   if (mErr) throw mErr;
   if (eErr) throw eErr;
   if (bErr) throw bErr;
+  if (pErr) throw pErr;
   if (!group) throw notFound();
 
   const expenseIds = new Set((expenses ?? []).map((e) => e.id));
@@ -54,14 +65,14 @@ async function fetchGroupBundle(groupId: string) {
   const byExpense = new Map<string, string[]>();
   for (const b of benesFiltered) {
     if (!byExpense.has(b.expense_id)) byExpense.set(b.expense_id, []);
-    byExpense.get(b.expense_id)!.push(b.member_id);
+    byExpense.get(b.expense_id)?.push(b.member_id);
   }
   const expensesFull: ExpenseWithBeneficiaries[] = (expenses ?? []).map((e) => ({
     ...e,
     beneficiary_ids: byExpense.get(e.id) ?? [],
   }));
 
-  return { group, members: members ?? [], expenses: expensesFull };
+  return { group, members: members ?? [], expenses: expensesFull, payments: payments ?? [] };
 }
 
 function GroupPage() {
@@ -81,7 +92,7 @@ function GroupPage() {
     return <div className="p-10 text-center text-destructive">שגיאה בטעינה</div>;
   }
 
-  const { group, members, expenses } = data;
+  const { group, members, expenses, payments } = data;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 md:py-12">
@@ -121,7 +132,7 @@ function GroupPage() {
           <MembersTab groupId={groupId} members={members} onChange={invalidate} />
         </TabsContent>
         <TabsContent value="balance" className="mt-6 space-y-6">
-          <BalanceTab groupName={group.name} members={members} expenses={expenses} />
+          <BalanceTab groupId={groupId} groupName={group.name} members={members} expenses={expenses} payments={payments} onChange={invalidate} />
         </TabsContent>
       </Tabs>
     </main>
@@ -133,6 +144,7 @@ function GroupPage() {
 function MembersTab({ groupId, members, onChange }: { groupId: string; members: Member[]; onChange: () => void }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [details, setDetails] = useState("");
 
   const add = useMutation({
@@ -140,16 +152,18 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
       const trimmed = name.trim();
       if (!trimmed) throw new Error("שם חסר");
       if (trimmed.length > 60) throw new Error("שם ארוך מדי");
+      if (email.trim() && !validEmail(email)) throw new Error("כתובת מייל לא תקינה");
       const { error } = await supabase.from("members").insert({
         group_id: groupId,
         name: trimmed,
         phone: phone.trim() || null,
+        email: email.trim() || null,
         payment_details: details.trim() || null,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      setName(""); setPhone(""); setDetails("");
+      setName(""); setPhone(""); setEmail(""); setDetails("");
       toast.success("החבר נוסף 👋");
       onChange();
     },
@@ -157,15 +171,17 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ name: "", phone: "", details: "" });
+  const [edit, setEdit] = useState({ name: "", phone: "", email: "", details: "" });
 
   const update = useMutation({
     mutationFn: async (id: string) => {
       const n = edit.name.trim();
       if (!n) throw new Error("שם חסר");
+      if (edit.email.trim() && !validEmail(edit.email)) throw new Error("כתובת מייל לא תקינה");
       const { error } = await supabase.from("members").update({
         name: n,
         phone: edit.phone.trim() || null,
+        email: edit.email.trim() || null,
         payment_details: edit.details.trim() || null,
       }).eq("id", id);
       if (error) throw error;
@@ -206,6 +222,10 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="050-0000000" maxLength={20} />
             </div>
             <div>
+              <Label htmlFor="member-email" className="mb-1.5 block">מייל</Label>
+              <Input id="member-email" type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" maxLength={254} />
+            </div>
+            <div>
               <Label className="mb-1.5 block">פרטי תשלום</Label>
               <Input value={details} onChange={(e) => setDetails(e.target.value)} placeholder="ביט / פייבוקס / חשבון" maxLength={200} />
             </div>
@@ -224,11 +244,12 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
         ) : (
           members.map((m) => editingId === m.id ? (
             <Card key={m.id} className="border-2 border-primary">
-              <CardContent className="grid gap-2 p-4 md:grid-cols-3">
+              <CardContent className="grid gap-2 p-4 md:grid-cols-2">
                 <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="שם" maxLength={60} />
                 <Input value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="טלפון" maxLength={20} />
+                <Input aria-label="מייל" type="email" dir="ltr" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} placeholder="מייל" maxLength={254} />
                 <Input value={edit.details} onChange={(e) => setEdit({ ...edit, details: e.target.value })} placeholder="פרטי תשלום" maxLength={200} />
-                <div className="flex gap-2 md:col-span-3">
+                <div className="flex gap-2 md:col-span-2">
                   <Button size="sm" className="rounded-lg font-bold" disabled={update.isPending || !edit.name.trim()} onClick={() => update.mutate(m.id)}>
                     <Check className="ms-1 h-4 w-4" /> שמור
                   </Button>
@@ -244,7 +265,7 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
                 <div className="min-w-0">
                   <p className="truncate font-bold text-foreground">{m.name}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {[m.phone, m.payment_details].filter(Boolean).join(" · ") || "אין פרטים נוספים"}
+                    {[m.phone, m.email, m.payment_details].filter(Boolean).join(" · ") || "אין פרטים נוספים"}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -254,7 +275,7 @@ function MembersTab({ groupId, members, onChange }: { groupId: string; members: 
                   aria-label="עריכה"
                   onClick={() => {
                     setEditingId(m.id);
-                    setEdit({ name: m.name, phone: m.phone ?? "", details: m.payment_details ?? "" });
+                    setEdit({ name: m.name, phone: m.phone ?? "", email: m.email ?? "", details: m.payment_details ?? "" });
                   }}
                 >
                   <Pencil className="h-4 w-4" />
@@ -477,18 +498,37 @@ function ExpensesTab({
 /* ---------------- Balance ---------------- */
 
 function BalanceTab({
-  groupName, members, expenses,
+  groupId, groupName, members, expenses, payments, onChange,
 }: {
+  groupId: string;
   groupName: string;
   members: Member[];
   expenses: ExpenseWithBeneficiaries[];
+  payments: SettlementPayment[];
+  onChange: () => void;
 }) {
   const balances = useMemo(() => computeBalances(members, expenses), [members, expenses]);
   const settlements = useMemo(() => simplifySettlements(balances), [balances]);
+  const key = useMemo(() => calculationKey(members, expenses), [members, expenses]);
+  const unpaid = useMemo(() => unpaidSettlements(settlements, payments, key), [settlements, payments, key]);
+  const gmailUrl = useMemo(() => gmailReminderUrl(groupName, unpaid), [groupName, unpaid]);
+  const missingEmails = [...new Set(unpaid.filter((s) => !validEmail(s.from.email ?? "")).map((s) => s.from.name))];
+  const setPaid = useMutation({
+    mutationFn: async ({ settlement, isPaid }: { settlement: (typeof settlements)[number]; isPaid: boolean }) => {
+      const { error } = await supabase.from("settlement_payments").upsert({
+        group_id: groupId, from_member_id: settlement.from.id, to_member_id: settlement.to.id,
+        amount: settlement.amount, calculation_key: key, is_paid: isPaid, updated_at: new Date().toISOString(),
+      }, { onConflict: "group_id,from_member_id,to_member_id,calculation_key" });
+      if (error) throw error;
+    },
+    onSuccess: async () => { await onChange(); toast.success("מצב התשלום עודכן"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
   const total = useMemo(() => expenses.reduce((s, e) => s + Number(e.amount), 0), [expenses]);
   const summary = useMemo(
-    () => generateWhatsAppSummary(groupName, balances, settlements, total),
-    [groupName, balances, settlements, total]
+    () => generateWhatsAppSummary(groupName, balances, unpaid, total)
+      .replace("🎉 אין צורך בהעברות — הכל מאוזן!", settlements.length ? "🎉 כל התשלומים סומנו כשולמו!" : "🎉 אין צורך בהעברות — הכל מאוזן!"),
+    [groupName, balances, unpaid, settlements.length, total]
   );
 
   const copy = async () => {
@@ -563,17 +603,29 @@ function BalanceTab({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            תשלומים לביצוע
+            מעקב תשלומים
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {settlements.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">שולמו {settlements.length - unpaid.length} מתוך {settlements.length} · נותרו ₪{unpaid.reduce((sum, s) => sum + s.amount, 0).toFixed(2)}</p>
+              <Button variant="outline" disabled={!gmailUrl || setPaid.isPending} onClick={() => { if (gmailUrl) window.open(gmailUrl, "_blank", "noopener,noreferrer"); }}>
+                <Mail className="ms-2 h-4 w-4" /> תזכורת ב־Gmail
+              </Button>
+            </div>
+          )}
+          {missingEmails.length > 0 && <p className="break-words text-sm text-destructive">חסרה כתובת מייל: {missingEmails.join(", ")}</p>}
+          {payments.some((p) => p.is_paid && p.calculation_key !== key) && !payments.some((p) => p.calculation_key === key) && (
+            <p className="text-sm text-muted-foreground">החישוב השתנה מאז סימון התשלומים הקודם. יש לבדוק מחדש אילו העברות שולמו.</p>
+          )}
           {settlements.length === 0 ? (
             <p className="py-6 text-center text-muted-foreground">🎉 הכל מאוזן, אין צורך בהעברות</p>
           ) : (
             <div className="space-y-2">
               {settlements.map((s, i) => (
-                <div key={i} className="rounded-xl border-2 bg-card p-4">
-                  <div className="flex items-center justify-between gap-3">
+                <div key={i} className="rounded-xl border-2 bg-card p-4" data-testid={`payment-${s.from.id}-${s.to.id}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="font-bold">
                       <span className="text-destructive">{s.from.name}</span>
                       <span className="mx-2 text-muted-foreground">←</span>
@@ -588,6 +640,13 @@ function BalanceTab({
                       פרטי תשלום: <span className="font-semibold text-foreground">{s.to.payment_details}</span>
                     </p>
                   )}
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-semibold">
+                    <Checkbox aria-label={`שולם: ${s.from.name} ל${s.to.name}`} checked={isSettlementPaid(s, payments, key)} disabled={setPaid.isPending}
+                      onCheckedChange={(checked) => setPaid.mutate({ settlement: s, isPaid: checked === true })} />
+                    <span className={isSettlementPaid(s, payments, key) ? "text-success" : "text-destructive"}>
+                      {isSettlementPaid(s, payments, key) ? "שולם" : "טרם שולם"}
+                    </span>
+                  </label>
                 </div>
               ))}
             </div>

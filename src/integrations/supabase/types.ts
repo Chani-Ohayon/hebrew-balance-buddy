@@ -107,6 +107,7 @@ export type Database = {
       members: {
         Row: {
           created_at: string
+          email: string | null
           group_id: string
           id: string
           name: string
@@ -115,6 +116,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          email?: string | null
           group_id: string
           id?: string
           name: string
@@ -123,6 +125,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          email?: string | null
           group_id?: string
           id?: string
           name?: string
@@ -135,6 +138,61 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settlement_payments: {
+        Row: {
+          amount: number
+          calculation_key: string
+          from_member_id: string
+          group_id: string
+          id: string
+          is_paid: boolean
+          to_member_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          calculation_key: string
+          from_member_id: string
+          group_id: string
+          id?: string
+          is_paid?: boolean
+          to_member_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          calculation_key?: string
+          from_member_id?: string
+          group_id?: string
+          id?: string
+          is_paid?: boolean
+          to_member_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_payments_from_member_id_fkey"
+            columns: ["from_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_payments_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_payments_to_member_id_fkey"
+            columns: ["to_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]

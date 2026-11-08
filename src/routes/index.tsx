@@ -9,6 +9,14 @@ import { Calculator, Plus, Users, ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
+  head: () => ({ meta: [
+    { title: "חישוב מהיר — הקבוצות שלי" },
+    { name: "description", content: "ניהול קבוצות, הוצאות משותפות והתחשבנות בעברית." },
+    { property: "og:title", content: "חישוב מהיר — הקבוצות שלי" },
+    { property: "og:description", content: "קבוצות והוצאות משותפות במקום אחד." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: HomePage,
 });
 
