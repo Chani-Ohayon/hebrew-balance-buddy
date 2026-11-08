@@ -1,4 +1,4 @@
 # Tasks
-- [ ] Add member email addresses and payment status storage.
-- [ ] Add paid/unpaid controls and Gmail reminder drafts.
-- [ ] Verify saving, reloading, recipient selection, and mobile layout.
+- [x] Add member email addresses and payment status storage.
+- [x] Add paid/unpaid controls and Gmail reminder drafts.
+- [x] Verify saving, reloading, recipient selection, and mobile layout.
