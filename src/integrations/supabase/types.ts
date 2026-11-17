@@ -86,6 +86,29 @@ export type Database = {
           },
         ]
       }
+      group_share_links: {
+        Row: {
+          group_id: string
+          token: string
+        }
+        Insert: {
+          group_id: string
+          token?: string
+        }
+        Update: {
+          group_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_share_links_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: true
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           created_at: string
@@ -205,7 +228,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      read_shared_group: { Args: { share_token: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

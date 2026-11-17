@@ -55,4 +55,26 @@ describe.skipIf(!dir)("Live owner-only group access", () => {
     const { error } = await owner.from("groups").update({ owner_id: otherId }).eq("id", groupId);
     expect(error?.code).toBe("42501");
   });
+  it("shared link allows anonymous read only, omits contact and bank fields, and can be revoked", async () => {
+    const created = await owner.from('group_share_links').upsert({ group_id: groupId }).select('token').single();
+    expect(created.error).toBeNull();
+    if (!created.data) throw new Error('No share link');
+    const token = created.data.token;
+    const shared = await anon.rpc('read_shared_group', { share_token: token });
+    expect(shared.error).toBeNull();
+    const payload = shared.data as unknown as { group: { id: string }; members: { email: null; phone: null; payment_details: null }[] };
+    expect(payload.group.id).toBe(groupId);
+    expect(payload.members.length).toBe(2);
+    for (const member of payload.members) {
+      expect(member.email).toBeNull(); expect(member.phone).toBeNull(); expect(member.payment_details).toBeNull();
+    }
+    const write = await anon.from('expenses').update({ amount: 999 }).eq('group_id', groupId).select();
+    expect(write.error).not.toBeNull();
+    const changeLink = await other.from('group_share_links').delete().eq('group_id', groupId).select();
+    expect(changeLink.data).toEqual([]);
+    const revoked = await owner.from('group_share_links').delete().eq('group_id', groupId);
+    expect(revoked.error).toBeNull();
+    const hidden = await anon.rpc('read_shared_group', { share_token: token });
+    expect(hidden.data).toBeNull();
+  });
 });

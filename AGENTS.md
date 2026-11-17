@@ -13,3 +13,4 @@
 - Gmail reminders use client-side compose links with BCC recipients, never automatic email sends or account connectors.
 - Group data uses owner-scoped RLS across every related table; existing unowned groups stay inaccessible until their owners are verified.
 - Private routes live under the client-only authenticated layout; query caches are identity-scoped and cleared before sign-out to prevent cross-account disclosure.
+- Read-only sharing uses revocable random tokens and a narrow security-definer read RPC that excludes contact and bank fields; base-table RLS remains owner-only.

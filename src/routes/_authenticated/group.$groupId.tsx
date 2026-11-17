@@ -14,6 +14,7 @@ import { calculationKey, gmailReminderUrl, isSettlementPaid, unpaidSettlements, 
 import { toast } from "sonner";
 import type { Member } from "@/lib/settlements";
 import { AccountBar } from "@/components/account-bar";
+import { GroupShare } from "@/components/group-share";
 import {
   computeBalances,
   simplifySettlements,
@@ -115,6 +116,7 @@ function GroupPage() {
         </div>
       </header>
 
+      <GroupShare groupId={groupId} userId={user.id} />
       <Tabs defaultValue="expenses" className="w-full">
         <TabsList className="grid h-12 w-full grid-cols-3 rounded-2xl bg-muted p-1">
           <TabsTrigger value="expenses" className="gap-1 rounded-xl font-semibold">

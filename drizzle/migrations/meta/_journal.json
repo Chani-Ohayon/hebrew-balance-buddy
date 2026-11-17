@@ -15,6 +15,13 @@
       "when": 1794939565773,
       "tag": "0001_private_group_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794940936939,
+      "tag": "0002_read_only_group_sharing",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,7 @@
 # Tasks
+- [x] Add revocable read-only share links and verify owner/viewer access.
+- [x] Verify member edits, expense edits and payment flags persist after reload.
+- [ ] Diagnose the specific missing change (waiting for the user to identify what disappeared).
 - [x] Restore the existing group to the confirmed chanio05567 account and verify it in the UI.
 - [x] Add account sign-in and sign-out with protected group pages.
 - [x] Enforce owner-only access for groups and all related data.
