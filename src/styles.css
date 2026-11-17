@@ -128,3 +128,7 @@
 @utility shadow-soft {
   box-shadow: var(--shadow-soft);
 }
+
+:root { --google-background: #ffffff; --google-border: #747775; --google-text: #1f1f1f; }
+.dark { --google-background: #131314; --google-border: #8e918f; --google-text: #e3e3e3; }
+.google-sign-in { background: var(--google-background); border-color: var(--google-border); color: var(--google-text); font-size: 14px; font-weight: 500; gap: 10px; padding-inline: 12px; }

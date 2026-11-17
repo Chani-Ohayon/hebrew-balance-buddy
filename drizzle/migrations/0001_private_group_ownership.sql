@@ -1,0 +1,16 @@
+ALTER TABLE public.groups ADD COLUMN owner_id uuid DEFAULT auth.uid();
+CREATE INDEX groups_owner_id_idx ON public.groups(owner_id);
+DO $$ DECLARE p record; BEGIN FOR p IN SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('groups','members','expenses','expense_beneficiaries','settlement_payments') LOOP EXECUTE format('DROP POLICY %I ON public.%I', p.policyname, p.tablename); END LOOP; END $$;
+REVOKE ALL ON public.groups, public.members, public.expenses, public.expense_beneficiaries, public.settlement_payments FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.groups, public.members, public.expenses, public.expense_beneficiaries, public.settlement_payments TO authenticated;
+GRANT ALL ON public.groups, public.members, public.expenses, public.expense_beneficiaries, public.settlement_payments TO service_role;
+ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expense_beneficiaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settlement_payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_groups ON public.groups FOR ALL TO authenticated USING (owner_id = (SELECT auth.uid())) WITH CHECK (owner_id = (SELECT auth.uid()));
+CREATE POLICY own_members ON public.members FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.groups g WHERE g.id = group_id AND g.owner_id = (SELECT auth.uid()))) WITH CHECK (EXISTS (SELECT 1 FROM public.groups g WHERE g.id = group_id AND g.owner_id = (SELECT auth.uid())));
+CREATE POLICY own_expenses ON public.expenses FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.groups g WHERE g.id = group_id AND g.owner_id = (SELECT auth.uid()))) WITH CHECK (EXISTS (SELECT 1 FROM public.groups g JOIN public.members m ON m.group_id = g.id WHERE g.id = expenses.group_id AND m.id = expenses.payer_id AND g.owner_id = (SELECT auth.uid())));
+CREATE POLICY own_beneficiaries ON public.expense_beneficiaries FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.expenses e JOIN public.groups g ON g.id = e.group_id WHERE e.id = expense_id AND g.owner_id = (SELECT auth.uid()))) WITH CHECK (EXISTS (SELECT 1 FROM public.expenses e JOIN public.groups g ON g.id = e.group_id JOIN public.members m ON m.group_id = e.group_id WHERE e.id = expense_beneficiaries.expense_id AND m.id = expense_beneficiaries.member_id AND g.owner_id = (SELECT auth.uid())));
+CREATE POLICY own_payments ON public.settlement_payments FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM public.groups g WHERE g.id = group_id AND g.owner_id = (SELECT auth.uid()))) WITH CHECK (EXISTS (SELECT 1 FROM public.groups g JOIN public.members f ON f.group_id = g.id JOIN public.members t ON t.group_id = g.id WHERE g.id = settlement_payments.group_id AND f.id = from_member_id AND t.id = to_member_id AND g.owner_id = (SELECT auth.uid())));

@@ -13,6 +13,7 @@ import { ArrowRight, Trash2, Pencil, Check, X, Users, Receipt, Calculator, Copy,
 import { calculationKey, gmailReminderUrl, isSettlementPaid, unpaidSettlements, validEmail, type SettlementPayment } from "@/lib/payments";
 import { toast } from "sonner";
 import type { Member } from "@/lib/settlements";
+import { AccountBar } from "@/components/account-bar";
 import {
   computeBalances,
   simplifySettlements,
@@ -20,7 +21,7 @@ import {
   type ExpenseWithBeneficiaries,
 } from "@/lib/settlements";
 
-export const Route = createFileRoute("/group/$groupId")({
+export const Route = createFileRoute("/_authenticated/group/$groupId")({
   head: () => ({ meta: [
     { title: "התחשבנות ותשלומים בקבוצה — חישוב מהיר" },
     { name: "description", content: "ניהול חברים, הוצאות, תשלומים ותזכורות במייל לקבוצה." },
@@ -33,13 +34,13 @@ export const Route = createFileRoute("/group/$groupId")({
   errorComponent: ({ error }) => (
     <div className="p-8 text-center" dir="rtl">
       <p className="text-destructive">שגיאה: {(error as Error).message}</p>
-      <Link to="/" className="mt-4 inline-block text-primary underline">חזרה</Link>
+      <Link to="/groups" className="mt-4 inline-block text-primary underline">חזרה</Link>
     </div>
   ),
   notFoundComponent: () => (
     <div className="p-8 text-center" dir="rtl">
       <p>הקבוצה לא נמצאה</p>
-      <Link to="/" className="mt-4 inline-block text-primary underline">חזרה</Link>
+      <Link to="/groups" className="mt-4 inline-block text-primary underline">חזרה</Link>
     </div>
   ),
 });
@@ -76,10 +77,11 @@ async function fetchGroupBundle(groupId: string) {
 }
 
 function GroupPage() {
+  const { user } = Route.useRouteContext();
   const { groupId } = Route.useParams();
   const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["group", groupId],
+    queryKey: ["group", groupId, user.id],
     queryFn: () => fetchGroupBundle(groupId),
   });
 
@@ -89,15 +91,16 @@ function GroupPage() {
     return <div className="p-10 text-center text-muted-foreground">טוען...</div>;
   }
   if (error || !data) {
-    return <div className="p-10 text-center text-destructive">שגיאה בטעינה</div>;
+    return <div className="p-10 text-center"><p className="text-destructive">הקבוצה אינה זמינה בחשבון שלך</p><Link to="/groups" className="mt-4 inline-block text-primary underline">הקבוצות שלי</Link></div>;
   }
 
   const { group, members, expenses, payments } = data;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 md:py-12">
+      <AccountBar email={user.email} />
       <div className="mb-6 flex items-center justify-between">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/groups" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowRight className="h-4 w-4" />
           כל הקבוצות
         </Link>
